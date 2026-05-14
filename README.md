@@ -138,7 +138,7 @@ Armazena os produtos cadastrados.
 
 ---
 
-📌 Tabela movimentações
+Tabela movimentações
 
 Armazena o histórico de entradas e saídas.
 
@@ -151,7 +151,7 @@ Armazena o histórico de entradas e saídas.
 | data       | TEXT    |
 
 
-▶️ Como Executar o Projeto
+Como Executar o Projeto
 
 1️⃣ Instalar as bibliotecas
 
@@ -206,7 +206,7 @@ Quantidade: 3
 ```
 
 
-# 📊 Conceitos Aplicados
+Conceitos Aplicados
 
 Este projeto utiliza diversos conceitos importantes da programação:
 
@@ -221,7 +221,7 @@ Este projeto utiliza diversos conceitos importantes da programação:
 * Estruturas condicionais
 * Laços de repetição
 
-# 🔒 Possíveis Melhorias Futuras
+Possíveis Melhorias Futuras
 
 Algumas melhorias que podem ser adicionadas futuramente:
 
