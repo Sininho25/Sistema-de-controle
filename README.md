@@ -108,7 +108,7 @@ Exemplo do arquivo gerado:
 ]
 ```
 
-🛠️ Tecnologias Utilizadas
+Tecnologias Utilizadas
 
 | Tecnologia | Função                |
 | ---------- | --------------------- |
