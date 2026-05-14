@@ -1,0 +1,51 @@
+# FUNÇÕES 
+
+def adicionar_produto(nome, quantidade, preco, estoque_min): 
+    cursor.execute("""
+    INSERT INTO produtos (nome, quantidade, preco, estoque_min)
+    VALUES (?, ?, ?, ?)
+    """, (nome, quantidade, preco, estoque_min))
+    conn.commit()
+    print("Produto cadastrado!")
+
+def registrar_movimentacao(produto_id, tipo, quantidade):
+    data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("""
+    INSERT INTO movimentacoes (produto_id, tipo, quantidade, data)
+    VALUES (?, ?, ?, ?)
+    """, (produto_id, tipo, quantidade, data))
+    conn.commit() 
+
+def entrada_produto(id_produto, quantidade):
+    cursor.execute("SELECT quantidade FROM produtos WHERE id = ?", (id_produto,))
+    resultado = cursor.fetchone()
+
+    if resultado:
+        nova_qtd = resultado[0] + quantidade
+        cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, id_produto))
+        conn.commit()
+        registrar_movimentacao(id_produto, "entrada", quantidade)
+        print("Entrada realizada!")
+    else:
+        print("Produto não encontrado!")
+
+def saida_produto(id_produto, quantidade): 
+    cursor.execute("SELECT quantidade FROM produtos WHERE id = ?", (id_produto,))
+    resultado = cursor.fetchone()
+
+    if resultado:
+        if resultado[0] >= quantidade:
+            nova_qtd = resultado[0] - quantidade
+            cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, id_produto))
+            conn.commit()
+            registrar_movimentacao(id_produto, "saida", quantidade)
+            print("Saída realizada!")
+        else:
+            print("Estoque insuficiente!")
+    else:
+        print("Produto não encontrado!")
+
+def listar_produtos():
+    df = pd.read_sql_query("SELECT * FROM produtos", conn)
+    print("\n=== ESTOQUE ===")
+    print(df)
