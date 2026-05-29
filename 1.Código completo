@@ -7,55 +7,61 @@ Original file is located at
     https://colab.research.google.com/drive/1j7NPprZhbQjq0sRzakvQAa6lf-LkVG8U
 """
 
-import sqlite3
-import pandas as pd
-import numpy as np
-import math
-import json
-from datetime import datetime
+# IMPORTAÇÃO DE BIBLIOTECAS
 
-# BANCO DE DADOS
+import sqlite3      # Para criação, conexão e manipulação do banco de dados relacional local
+import pandas as pd # Para transformar os dados do banco em tabelas organizadas (DataFrames)
+import numpy as np  # Para realizar operações matemáticas eficientes em conjuntos de dados
+import math         # Para funções matemáticas nativas do Python (ex: soma mais precisa de floats)
+import json         # Para converter e exportar os dados para o formato JSON
+from datetime import datetime # Para capturar a data e hora exata em que as ações ocorrem
 
+# CONFIGURAÇÃO DO BANCO DE DADOS
+
+# Conecta ao arquivo de banco de dados. Se "estoque.db" não existir, ele será criado.
 conn = sqlite3.connect("estoque.db")
+# O 'cursor' é o objeto que permite enviar e executar comandos de SQL no banco
 cursor = conn.cursor()
 
-# Tabela de produtos
-
+# Criação da tabela principal de armazenamento dos produtos
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS produtos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    quantidade INTEGER,
-    preco REAL,
-    estoque_min INTEGER
+    id INTEGER PRIMARY KEY AUTOINCREMENT, -- Chave primária: ID único que se autocompleta
+    nome TEXT,                            -- Nome do produto cadastrado
+    quantidade INTEGER,                   -- Saldo atual no estoque
+    preco REAL,                           -- Preço unitário (tipo float/real)
+    estoque_min INTEGER                   -- Limite para disparar o alerta de estoque baixo
 )
 """)
 
-# Tabela de histórico
-
+# Criação da tabela para registrar o histórico de todas as movimentações
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS movimentacoes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    produto_id INTEGER,
-    tipo TEXT,
-    quantidade INTEGER,
-    data TEXT
+    id INTEGER PRIMARY KEY AUTOINCREMENT, -- ID único para cada transação registrada
+    produto_id INTEGER,                   -- Chave estrangeira conectando a transação ao produto
+    tipo TEXT,                            -- Define se foi uma 'entrada' ou 'saida'
+    quantidade INTEGER,                   -- Quantidade de itens que foram movimentados
+    data TEXT                             -- Data e hora exata do registro
 )
 """)
 
+# O 'commit' confirma e salva permanentemente as tabelas criadas no arquivo .db
 conn.commit()
 
-# FUNÇÕES 
+# FUNÇÕES DE REGRA DE NEGÓCIO (CRUD)
 
 def adicionar_produto(nome, quantidade, preco, estoque_min): 
+    """Recebe os dados digitados pelo usuário e insere um novo produto no banco."""
     cursor.execute("""
     INSERT INTO produtos (nome, quantidade, preco, estoque_min)
     VALUES (?, ?, ?, ?)
-    """, (nome, quantidade, preco, estoque_min))
+    """, (nome, quantidade, preco, estoque_min)) # O uso das interrogações (?) previne ataques de SQL Injection
     conn.commit()
     print("Produto cadastrado!")
 
 def registrar_movimentacao(produto_id, tipo, quantidade):
+    """Função auxiliar chamada automaticamente sempre que ocorre uma entrada ou saída."""
+    # Captura o momento atual e formata como string (Ano-Mês-Dia Hora:Min:Seg)
     data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("""
     INSERT INTO movimentacoes (produto_id, tipo, quantidade, data)
@@ -64,25 +70,30 @@ def registrar_movimentacao(produto_id, tipo, quantidade):
     conn.commit() 
 
 def entrada_produto(id_produto, quantidade):
+    """Busca um produto pelo ID e soma a nova quantidade ao saldo atual."""
+    # Localiza o produto no banco de dados
     cursor.execute("SELECT quantidade FROM produtos WHERE id = ?", (id_produto,))
-    resultado = cursor.fetchone()
+    resultado = cursor.fetchone() # Traz apenas a primeira linha correspondente
 
+    # Se a busca retornou algo (o produto existe)
     if resultado:
-        nova_qtd = resultado[0] + quantidade
+        nova_qtd = resultado[0] + quantidade # Calcula o novo saldo somando a entrada
         cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, id_produto))
         conn.commit()
-        registrar_movimentacao(id_produto, "entrada", quantidade)
+        registrar_movimentacao(id_produto, "entrada", quantidade) # Grava o log no histórico
         print("Entrada realizada!")
     else:
         print("Produto não encontrado!")
 
 def saida_produto(id_produto, quantidade): 
+    """Deduz unidades do saldo do produto, validando primeiro se há estoque suficiente."""
     cursor.execute("SELECT quantidade FROM produtos WHERE id = ?", (id_produto,))
     resultado = cursor.fetchone()
 
     if resultado:
+        # Regra de negócio: só permite a saída se o saldo for maior ou igual ao solicitado
         if resultado[0] >= quantidade:
-            nova_qtd = resultado[0] - quantidade
+            nova_qtd = resultado[0] - quantidade # Subtrai a quantidade do saldo
             cursor.execute("UPDATE produtos SET quantidade = ? WHERE id = ?", (nova_qtd, id_produto))
             conn.commit()
             registrar_movimentacao(id_produto, "saida", quantidade)
@@ -92,42 +103,54 @@ def saida_produto(id_produto, quantidade):
     else:
         print("Produto não encontrado!")
 
+# FUNÇÕES DE ANÁLISE E RELATÓRIOS
+
 def listar_produtos():
+    """Lê o banco de dados e exibe todos os produtos usando a interface visual do Pandas."""
+    # Converte os resultados do SQL diretamente em um DataFrame (tabela)
     df = pd.read_sql_query("SELECT * FROM produtos", conn)
     print("\n=== ESTOQUE ===")
     print(df)
 
     # ALERTA DE ESTOQUE BAIXO
-
+    # Cria uma nova tabela apenas com itens onde a quantidade atual é menor/igual ao mínimo exigido
     baixos = df[df["quantidade"] <= df["estoque_min"]]
-    if not baixos.empty:
+    if not baixos.empty: # Verifica se existem itens nessa condição
         print("\n⚠️ ALERTA: Estoque baixo!")
         print(baixos)
 
-    return df
+    return df # Retorna a tabela para ser reaproveitada em outras funções (como cálculo de total)
 
 def historico():
+    """Lê e imprime todas as movimentações registradas na tabela de histórico."""
     df = pd.read_sql_query("SELECT * FROM movimentacoes", conn)
     print("\n=== HISTÓRICO ===")
     print(df)
 
 def calcular_total(df):
+    """Multiplica o estoque pelo preço unitário e soma o valor de todos os itens."""
+    # np.sum realiza o cálculo de forma otimizada utilizando a biblioteca NumPy
     total = np.sum(df["quantidade"] * df["preco"])
-    print(f"Total em estoque: R${total:.2f}")
+    print(f"Total em estoque: R${total:.2f}") # O ':.2f' formata o número com duas casas decimais
 
 def media_precos(df):
-    if len(df) > 0:
-        media = math.fsum(df["preco"]) / len(df)
+    """Calcula o valor médio (em reais) dos produtos cadastrados."""
+    if len(df) > 0: # Evita erro de divisão por zero caso o estoque esteja vazio
+        media = math.fsum(df["preco"]) / len(df) # math.fsum é mais preciso que sum() padrão para floats
         print(f"Média de preços: R${media:.2f}")
 
 def exportar_json(df):
+    """Converte os dados da tabela em um arquivo no formato JSON."""
+    # Transforma o DataFrame Pandas em uma lista de dicionários do Python
     dados = df.to_dict(orient="records")
+    # O comando 'with open' é recomendado porque fecha o arquivo sozinho após o término da gravação
     with open("estoque.json", "w") as f:
-        json.dump(dados, f, indent=4)
+        json.dump(dados, f, indent=4) # 'indent=4' garante que o arquivo saia identado e legível
     print("Exportado para JSON!")
 
-# MENU
+# MENU DE INTERAÇÃO COM O USUÁRIO
 
+# Laço de repetição infinito que mantém o painel ativo até a opção 0 ser escolhida
 while True:
     print("\n1 - Cadastrar Produto")
     print("2 - Entrada")
@@ -139,8 +162,9 @@ while True:
     print("8 - Exportar JSON")
     print("0 - Sair")
 
-    opcao = input("Escolha: ")
+    opcao = input("Escolha: ") # Aguarda a digitação do usuário
 
+    # Bloco condicional que redireciona a execução dependendo da opção digitada
     if opcao == "1":
         nome = input("Nome: ")
         quantidade = int(input("Quantidade: "))
@@ -162,7 +186,7 @@ while True:
         listar_produtos()
 
     elif opcao == "5":
-        df = listar_produtos()
+        df = listar_produtos() # Chama listar_produtos() para obter os dados mais atualizados do banco
         calcular_total(df)
 
     elif opcao == "6":
@@ -177,7 +201,10 @@ while True:
         exportar_json(df)
 
     elif opcao == "0":
+        # Finaliza o programa quebrando o loop principal
+        print("Encerrando sistema...")
         break
 
     else:
-        print("Opção inválida!") 
+        # Tratamento de erro básico caso o usuário digite um número que não está no menu
+        print("Opção inválida!")
